@@ -1,0 +1,2487 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## READ THE DATA
+
+```{r}
+library(dplyr)
+library(data.table)
+library(mltools)
+chicago_crime <- read.table(file = "chicago_crime_clean.csv", #Name of text file.
+                      sep = ",",                       #Separation character.
+                      header = TRUE,                   #If column names are in the first row.
+                      na.strings = "NA",               #Character to be marked as missing value.
+                      stringsAsFactors = FALSE)
+
+chicago_crime$location_description <- (gsub(","," ",chicago_crime$location_description))
+chicago_crime$description <- gsub(":=","",chicago_crime$description)
+chicago_crime$description <- gsub(":","",chicago_crime$description)
+chicago_crime$description <- gsub("MANU/POSS. W/","",chicago_crime$description)
+chicago_crime$description <- gsub(",","",chicago_crime$description)
+#chicago_crime$description <- gsub(".","",chicago_crime$description)
+chicago_crime$location_description <- gsub("(E.G.  UBER  LYFT)","",chicago_crime$location_description)
+chicago_crime$location_description <- gsub(",","",chicago_crime$location_description)
+#chicago_crime$location_description <- gsub(".","",chicago_crime$location_description)
+
+chicago_crime <- chicago_crime %>%
+    dplyr::mutate(year = lubridate::year(date), 
+                month = lubridate::month(date), 
+                day = lubridate::day(date))
+chicago_crime <- na.omit(chicago_crime)
+chicago_crime <- select(chicago_crime,-c(X,unique_key, x_coordinate, y_coordinate, location, domestic, fbi_code, date,year))
+chicago_crime$district <- factor(chicago_crime$district)
+
+unique(chicago_crime$primary_type)
+
+head(chicago_crime)
+summary(chicago_crime)
+```
+
+## Read the training set
+
+```{r}
+library(dplyr)
+library(data.table)
+library(mltools)
+chicago_crime_tr <- read.table(file = "chicago_crime_tr.csv", #Name of text file.
+                      sep = ",",                       #Separation character.
+                      header = TRUE,                   #If column names are in the first row.
+                      na.strings = "NA",               #Character to be marked as missing value.
+                      stringsAsFactors = FALSE)
+
+chicago_crime_tr$location_description <- (gsub(","," ",chicago_crime_tr$location_description))
+chicago_crime_tr$description <- gsub(":=","",chicago_crime_tr$description)
+chicago_crime_tr$description <- gsub(":","",chicago_crime_tr$description)
+chicago_crime_tr$description <- gsub("MANU/POSS. W/","",chicago_crime_tr$description)
+chicago_crime_tr$description <- gsub(",","",chicago_crime_tr$description)
+#chicago_crime$description <- gsub(".","",chicago_crime$description)
+chicago_crime_tr$location_description <- gsub("(E.G.  UBER  LYFT)","",chicago_crime_tr$location_description)
+chicago_crime_tr$location_description <- gsub(",","",chicago_crime_tr$location_description)
+#chicago_crime$location_description <- gsub(".","",chicago_crime$location_description)
+
+chicago_crime_tr <- chicago_crime_tr %>%
+    dplyr::mutate(year = lubridate::year(date), 
+                month = lubridate::month(date), 
+                day = lubridate::day(date))
+
+chicago_crime_tr <- select(chicago_crime_tr,-c(X,unique_key, x_coordinate, y_coordinate, location, domestic, fbi_code, date,year))
+
+chicago_crime_tr <- na.omit(chicago_crime_tr)
+chicago_crime_tr$district <- factor(chicago_crime_tr$district)
+
+unique(chicago_crime_tr$primary_type)
+
+head(chicago_crime_tr)
+summary(chicago_crime_tr)
+
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "CRIMINAL TRESPASS"] <- "ROBBERY"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "BURGLARY"] <- "ROBBERY"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "MOTOR VEHICLE THEFT"] <- "THEFT"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "HOMICIDE"] <- "VIOLENT CRIME"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "KIDNAPPING"] <- "VIOLENT CRIME"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "BATTERY"] <- "VIOLENT CRIME"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "INTIMIDATION"] <- "VIOLENT CRIME"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "ARSON"] <- "VIOLENT CRIME"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "PROSTITUTION"] <- "SEX OFFENSE"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "CRIM SEXUAL ASSAULT"] <- "SEX OFFENSE"
+chicago_crime_tr$primary_type[chicago_crime_tr$primary_type == "OTHER NARCOTIC VIOLATION"] <- "NARCOTICS"
+chicago_crime_tr$primary_type <- factor(chicago_crime_tr$primary_type)
+
+chicago_crime_subset_tr <- subset(chicago_crime_tr, primary_type=="ASSAULT" | primary_type == "VIOLENT CRIME" | primary_type == "THEFT" | primary_type=="NARCOTICS" | primary_type == "WEAPONS VIOLATION" | primary_type=="ROBBERY" | primary_type == "CRIMINAL DAMAGE" | primary_type == "DECEPTIVE PRACTICE" )
+
+chicago_crime_subset_tr$primary_type <- factor(chicago_crime_subset_tr$primary_type)
+chicago_crime_subset_tr <- na.omit(chicago_crime_subset_tr)
+library(DataExplorer)
+plot_str(chicago_crime_subset_tr)
+plot_missing(chicago_crime_subset_tr)
+#plot_histogram(chicago_crime_subset)
+#plot_density(chicago_crime_subset)
+#plot_correlation(chicago_numeric, type = 'continuous')
+chicago_crime_subset_tr$month <- as.factor(chicago_crime_subset_tr$month)
+
+plot_bar(chicago_crime_subset_tr)
+```
+## EXPLORATORY ANALYSIS
+
+```{r}
+library(tidyverse)
+
+ggplot(data = chicago_crime) +
+  geom_bar(mapping = aes(x = primary_type)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+chicago_crime %>% 
+  count(primary_type)
+
+ggplot(data = chicago_crime) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1))
+
+chicago_crime %>% 
+  count(district)
+
+ggplot(data = chicago_crime) +
+  geom_bar(mapping = aes(x = arrest)) +
+  theme(axis.text.x = element_text(hjust = 1))
+
+chicago_crime %>% 
+  count(arrest)
+
+#chicago_crime$primary_type <- as.character(junk$nm)
+chicago_crime$primary_type[chicago_crime$primary_type == "CRIMINAL TRESPASS"] <- "ROBBERY"
+chicago_crime$primary_type[chicago_crime$primary_type == "BURGLARY"] <- "ROBBERY"
+chicago_crime$primary_type[chicago_crime$primary_type == "MOTOR VEHICLE THEFT"] <- "THEFT"
+chicago_crime$primary_type[chicago_crime$primary_type == "HOMICIDE"] <- "VIOLENT CRIME"
+chicago_crime$primary_type[chicago_crime$primary_type == "KIDNAPPING"] <- "VIOLENT CRIME"
+chicago_crime$primary_type[chicago_crime$primary_type == "BATTERY"] <- "VIOLENT CRIME"
+chicago_crime$primary_type[chicago_crime$primary_type == "INTIMIDATION"] <- "VIOLENT CRIME"
+chicago_crime$primary_type[chicago_crime$primary_type == "ARSON"] <- "VIOLENT CRIME"
+chicago_crime$primary_type[chicago_crime$primary_type == "PROSTITUTION"] <- "SEX OFFENSE"
+chicago_crime$primary_type[chicago_crime$primary_type == "CRIM SEXUAL ASSAULT"] <- "SEX OFFENSE"
+chicago_crime$primary_type[chicago_crime$primary_type == "OTHER NARCOTIC VIOLATION"] <- "NARCOTICS"
+chicago_crime$primary_type <- factor(chicago_crime$primary_type)
+
+ggplot(data = chicago_crime) +
+  geom_bar(mapping = aes(x = primary_type)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+chicago_crime %>% 
+  count(primary_type)
+
+chicago_crime_subset <- subset(chicago_crime, primary_type=="ASSAULT" | primary_type == "VIOLENT CRIME" | primary_type == "THEFT" | primary_type=="NARCOTICS" | primary_type == "WEAPONS VIOLATION" | primary_type=="ROBBERY" | primary_type == "CRIMINAL DAMAGE" | primary_type == "DECEPTIVE PRACTICE" )
+chicago_crime_subset$primary_type <- factor(chicago_crime_subset$primary_type)
+ggplot(data = chicago_crime_subset) +
+  geom_bar(mapping = aes(x = primary_type)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(data = chicago_crime_subset) +
+  geom_count(mapping = aes(x = primary_type, y = district)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(data = chicago_crime_subset) +
+  geom_count(mapping = aes(x = arrest, y = primary_type)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(data = chicago_crime_subset) +
+  geom_count(mapping = aes(x = arrest, y = district)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+## EXPLORATORY ANALYSIS BY CRIME
+
+```{r}
+assault <- subset(chicago_crime_subset, primary_type=="ASSAULT")
+violent_crime <- subset(chicago_crime_subset, primary_type=="VIOLENT CRIME")
+theft <- subset(chicago_crime_subset, primary_type=="THEFT")
+narcotics <- subset(chicago_crime_subset, primary_type=="NARCOTICS")
+weapons_violation <- subset(chicago_crime_subset, primary_type=="WEAPONS VIOLATION")
+robbery <- subset(chicago_crime_subset, primary_type=="ROBBERY")
+criminal_damage <- subset(chicago_crime_subset, primary_type=="CRIMINAL DAMAGE")
+deceptive_practice <- subset(chicago_crime_subset, primary_type=="DECEPTIVE PRACTICE")
+
+assault_tr <- subset(chicago_crime_subset_tr, primary_type=="ASSAULT")
+violent_tr_crime <- subset(chicago_crime_subset_tr, primary_type=="VIOLENT CRIME")
+theft_tr <- subset(chicago_crime_subset_tr, primary_type=="THEFT")
+narcotics_tr <- subset(chicago_crime_subset_tr, primary_type=="NARCOTICS")
+weapons_violation_tr <- subset(chicago_crime_subset_tr, primary_type=="WEAPONS VIOLATION")
+robbery_tr <- subset(chicago_crime_subset_tr, primary_type=="ROBBERY")
+criminal_damage_tr <- subset(chicago_crime_subset_tr, primary_type=="CRIMINAL DAMAGE")
+deceptive_practice_tr <- subset(chicago_crime_subset_tr, primary_type=="DECEPTIVE PRACTICE")
+```
+
+## DISTRICTS
+
+```{r}
+library(sqldf)
+
+districts_true <- sqldf('SELECT district, AVG(latitude) as avg_latitude,AVG(longitude) as avg_longitude, count(*) as arrest FROM chicago_crime_subset WHERE arrest LIKE "True" GROUP BY district ORDER BY district')
+districts_false <- sqldf('SELECT district, AVG(latitude) as avg_latitude,AVG(longitude) as avg_longitude, count(*) as no_arrest FROM chicago_crime_subset WHERE arrest LIKE "False" GROUP BY district ORDER BY district')
+districts_true$arrest <- as.numeric(districts_true$arrest)
+districts_false$no_arrest <- as.numeric(districts_false$no_arrest)
+districts_true
+districts_false
+
+police_districts <- read.table(file = "Police_Stations.csv", #Name of text file.
+                      sep = ",",                       #Separation character.
+                      header = TRUE,                   #If column names are in the first row.
+                      na.strings = "NA",               #Character to be marked as missing value.
+                      stringsAsFactors = FALSE)
+police_districts
+
+police_districts$DISTRICT[police_districts$DISTRICT == "Headquarters"] <- "0"
+police_districts$DISTRICT <- as.factor(police_districts$DISTRICT)
+
+districts <- sqldf('SELECT DISTRICT as district, LATITUDE as latitude,LONGITUDE as longitude FROM police_districts')
+
+arrest_percentage <- data.frame('District' = districts_false$district, 'PctArrest' = districts_true$arrest/(districts_true$arrest + districts_false$no_arrest), 'Crimes' = (districts_true$arrest + districts_false$no_arrest))
+arrest_percentage
+
+ggplot(data = arrest_percentage) +
+  geom_col(mapping = aes(x = District, y = Crimes)) +
+  geom_line(aes(x = District, y = PctArrest*10000, group = 1), color = "yellow") +
+  scale_y_continuous(sec.axis = sec_axis(~./10000, name = "PctArrest")) +
+  theme(axis.text.x = element_text(hjust = 1))
+
+## INITIALIZE
+library("leaflet")
+library("data.table")
+library("sp")
+library("rgdal")
+# library("maptools")
+library("KernSmooth")
+
+setDT(districts_false)
+
+#devtools::install_github("dkahle/ggmap", ref = "tidyup", force = TRUE)
+library(ggmap)
+chicago <- get_stamenmap(bbox = c(left = -88.0225, bottom = 41.5949, 
+                                  right = -87.2713, top = 42.0677), 
+                         zoom = 11)
+ggmap(chicago) +
+geom_text(aes(x = longitude, y = latitude, label = district), data = districts)
+```
+
+
+```{r}
+
+library(ggmap)
+chicago <- get_stamenmap(bbox = c(left = -88.0225, bottom = 41.5949, 
+                                  right = -87.2713, top = 42.0677), 
+                         zoom = 11)
+ggmap(chicago) +
+geom_text(aes(x = LONGITUDE, y = LATITUDE, label = DISTRICT), data = police_districts)
+```
+
+```{r}
+ggplot(data = assault) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("ASSAULT BY DISTRICT")
+
+ggplot(data = theft) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("THEFTS BY DISTRICT")
+
+ggplot(data = violent_crime) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("VIOLENT CRIMES BY DISTRICT")
+
+ggplot(data = narcotics) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("NARCOTIC CRIMES BY DISTRICT")
+
+ggplot(data = weapons_violation) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("WEAPON-RELATED CRIMES BY DISTRICT")
+
+ggplot(data = robbery) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("ROBBERIES BY DISTRICT")
+
+ggplot(data = criminal_damage) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("CRIMINAL DAMAGE CRIMES BY DISTRICT")
+
+ggplot(data = deceptive_practice) +
+  geom_bar(mapping = aes(x = district)) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  ggtitle("DECEPTIVE PRACTICE CRIMES BY DISTRICT")
+```
+```{r}
+library(ggplot2)
+
+ggplot(data = chicago_crime_subset, aes(x=primary_type, y=district, fill=arrest)) + 
+  geom_tile() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Correlation
+library(ggplot2)
+ggplot(chicago_crime_subset,aes(x=district,y=primary_type,color=arrest))+geom_point(alpha=0.5)
+```
+
+## Association Rules
+
+```{r}
+chicago_crime_subset_2 <- subset(chicago_crime_subset, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+chicago_crime_subset_2 <- subset(chicago_crime_subset_2, select=-c(location_description))
+write.csv(chicago_crime_subset_2,"chicago_crime_AR.csv", quote = FALSE, row.names = FALSE)
+library(arules)
+crime_transactions <- read.transactions("chicago_crime_AR.csv", sep=",")
+
+#deceptive_practice_2 <- subset(deceptive_practice, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+#write.csv(deceptive_practice_2,"deceptive_practice.csv", quote = FALSE, row.names = FALSE)
+#dp_transactions <- read.transactions("deceptive_practice.csv", sep=",")
+```
+```{r}
+if (!require("RColorBrewer")) {
+  # install color package of R
+  install.packages("RColorBrewer")
+  #include library RColorBrewer
+  library(RColorBrewer)
+}
+
+itemFrequencyPlot(crime_transactions,topN=20,type="absolute",
+                  col=brewer.pal(8,'Pastel2'), 
+                  main="Absolute Item Frequency Plot")
+```
+## Reglas de Asociacion General
+```{r}
+# Rule GENERATION
+association.rules.clean <- apriori(crime_transactions, parameter = list(supp=0.001, conf=0.7))
+subset.rules.clean <- which(colSums(is.subset(association.rules.clean, association.rules.clean)) > 1)
+subset.association.rules.clean. <- association.rules.clean[-subset.rules.clean]
+inspect(subset.association.rules.clean.)
+
+rules_by_count <- sort(association.rules.clean, by = "count")
+rules_by_conf <- sort(association.rules.clean, by = "confidence")
+rules_by_supp <- sort(association.rules.clean, by = "lift")
+inspect(rules_by_count)
+inspect(rules_by_conf)
+inspect(rules_by_supp)
+```
+```{r}
+# Rule GENERATION
+assault.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.001, conf=0.1),
+                                   appearance = list(default="lhs",rhs="ASSAULT"))
+# Borrar reglas redundantes
+assault.subset.rules <- which(colSums(is.subset(assault.association.rules, assault.association.rules)) > 1) # get subset rules in vector
+assault.subset.association.rules. <- assault.association.rules[-assault.subset.rules] # remove subset rules.
+inspect(assault.subset.association.rules.)
+
+as_by_count <- sort(assault.association.rules, by = "count")
+as_by_conf <- sort(assault.association.rules, by = "confidence")
+#dp_by_supp <- sort(dp.subset.association.rules., by = "support")
+inspect(as_by_count)
+inspect(as_by_conf)
+#inspect(dp_by_supp)
+```
+```{r}
+# Rule GENERATION
+cd.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.001, conf=0.1),
+                                     appearance = list(default="lhs",rhs="CRIMINAL DAMAGE"))
+# Borrar reglas redundantes
+cd.subset.rules <- which(colSums(is.subset(cd.association.rules, cd.association.rules)) > 1) # get subset rules in vector
+cd.subset.association.rules. <- cd.association.rules[-cd.subset.rules] # remove subset rules.
+inspect(cd.association.rules)
+
+cd_by_count <- sort(cd.association.rules, by = "count")
+cd_by_conf <- sort(cd.association.rules, by = "confidence")
+#dp_by_supp <- sort(dp.subset.association.rules., by = "support")
+inspect(cd_by_count)
+inspect(cd_by_conf)
+#inspect(dp_by_supp)
+```
+```{r}
+# Rule GENERATION
+dp.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.001, conf=0.1),
+                                     appearance = list(default="lhs",rhs="DECEPTIVE PRACTICE"))
+# Borrar reglas redundantes
+dp.subset.rules <- which(colSums(is.subset(dp.association.rules, dp.association.rules)) > 1) # get subset rules in vector
+dp.subset.association.rules. <- dp.association.rules[-dp.subset.rules] # remove subset rules.
+inspect(dp.subset.association.rules.)
+
+dp_by_count <- sort(dp.subset.association.rules., by = "count")
+dp_by_conf <- sort(dp.subset.association.rules., by = "confidence")
+#dp_by_supp <- sort(dp.subset.association.rules., by = "support")
+inspect(dp_by_count)
+inspect(dp_by_conf)
+#inspect(dp_by_supp)
+```
+```{r}
+narcotics_clean.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.001, conf=0.1),
+                                   appearance = list(default="lhs",rhs="NARCOTICS"))
+# Borrar reglas redundantes
+narcotics_clean.subset.rules <- which(colSums(is.subset(narcotics_clean.association.rules, narcotics_clean.association.rules)) > 1) # get subset rules in vector
+narcotics_clean.subset.association.rules. <- narcotics_clean.association.rules[-narcotics_clean.subset.rules] # remove subset rules.
+inspect(narcotics_clean.subset.association.rules.)
+
+narc_by_count <- sort(narcotics_clean.association.rules, by = "count")
+narc_by_conf <- sort(narcotics_clean.association.rules, by = "confidence")
+#dp_by_supp <- sort(dp.subset.association.rules., by = "support")
+inspect(narc_by_count)
+inspect(narc_by_conf)
+#inspect(dp_by_supp)
+```
+```{r}
+robbery.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.001, conf=0.15),
+                                   appearance = list(default="lhs",rhs="ROBBERY"))
+# Borrar reglas redundantes
+robbery.subset.rules <- which(colSums(is.subset(robbery.association.rules, robbery.association.rules)) > 1) 
+robbery.subset.association.rules. <- robbery.association.rules[-robbery.subset.rules] # remove subset rules.
+inspect(robbery.association.rules)
+
+rob_by_count <- sort(robbery.association.rules, by = "count")
+rob_by_conf <- sort(robbery.association.rules, by = "confidence")
+#dp_by_supp <- sort(dp.subset.association.rules., by = "support")
+inspect(rob_by_count)
+inspect(rob_by_conf)
+#inspect(dp_by_supp)
+```
+```{r}
+theft.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.005, conf=0.5),
+                                   appearance = list(default="lhs",rhs="THEFT"))
+# Borrar reglas redundantes
+theft.subset.rules <- which(colSums(is.subset(theft.association.rules, theft.association.rules)) > 1) 
+theft.subset.association.rules. <- theft.association.rules[-theft.subset.rules] # remove subset rules.
+inspect(theft.subset.association.rules.)
+
+theft_by_count <- sort(theft.association.rules, by = "count")
+theft_by_conf <- sort(theft.association.rules, by = "confidence")
+#dp_by_supp <- sort(dp.subset.association.rules., by = "support")
+inspect(theft_by_count)
+inspect(theft_by_conf)
+#inspect(dp_by_supp)
+```
+```{r}
+vc.association.rules <- apriori(crime_transactions, parameter = 
+                                     list(supp=0.001, conf=0.15),
+                                   appearance = list(default="lhs",rhs="VIOLENT CRIME"))
+# Borrar reglas redundantes
+vc.subset.rules <- which(colSums(is.subset(vc.association.rules, vc.association.rules)) > 1) # get subset rules in  
+vc.subset.association.rules. <- vc.association.rules[-vc.subset.rules] # remove subset rules.
+inspect(vc.subset.association.rules.)
+
+vc_by_count <- sort(vc.association.rules, by = "count")
+vc_by_conf <- sort(vc.association.rules, by = "confidence")
+#vc_by_supp <- sort(vc.subset.association.rules., by = "support")
+inspect(vc_by_count)
+inspect(vc_by_conf)
+#inspect(wv_by_supp)
+```
+```{r}
+wv.association.rules <- apriori(crime_transactions,parameter = 
+                                      list(supp=0.001, conf=0.1),
+                                      appearance = list(default="lhs",rhs="WEAPONS VIOLATION"))
+# Borrar reglas redundantes
+wv.subset.rules <- which(colSums(is.subset(wv.association.rules, wv.association.rules)) > 1) # get subset rules in  
+wv.subset.association.rules. <- wv.association.rules[-wv.subset.rules] # remove subset rules.
+inspect(wv.subset.association.rules.)
+
+wv_by_count <- sort(wv.association.rules, by = "count")
+wv_by_conf <- sort(wv.association.rules, by = "confidence")
+#wv_by_supp <- sort(wv.subset.association.rules., by = "support")
+inspect(wv_by_count)
+inspect(wv_by_conf)
+#inspect(wv_by_supp)
+```
+```{r}
+true.association.rules <- apriori(crime_transactions,parameter = 
+                                      list(supp=0.001, conf=0.5),
+                                      appearance = list(default="lhs",rhs="True"))
+# Borrar reglas redundantes
+true.subset.rules <- which(colSums(is.subset(true.association.rules, true.association.rules)) > 1) # get subset rules in  
+true.subset.association.rules. <- true.association.rules[-true.subset.rules] # remove subset rules.
+inspect(true.subset.association.rules.)
+
+t_by_count <- sort(true.subset.association.rules., by = "count")
+t_by_conf <- sort(true.subset.association.rules., by = "confidence")
+#wv_by_supp <- sort(wv.subset.association.rules., by = "support")
+inspect(t_by_count)
+inspect(t_by_conf)
+#inspect(wv_by_supp)
+```
+```{r}
+false.association.rules <- apriori(crime_transactions,parameter = 
+                                      list(supp=0.001, conf=0.8),
+                                      appearance = list(default="lhs",rhs="False"))
+# Borrar reglas redundantes
+false.subset.rules <- which(colSums(is.subset(false.association.rules, false.association.rules)) > 1) # get subset rules in  
+false.subset.association.rules. <- false.association.rules[-false.subset.rules] # remove subset rules.
+inspect(false.subset.association.rules.)
+
+f_by_count <- sort(false.association.rules, by = "count")
+f_by_conf <- sort(false.association.rules, by = "confidence")
+#wv_by_supp <- sort(wv.subset.association.rules., by = "support")
+inspect(f_by_count)
+inspect(f_by_conf)
+#inspect(wv_by_supp)
+```
+```{r}
+ocho.association.rules <- apriori(crime_transactions,parameter = 
+                                      list(supp=0.0001, conf=0.01),
+                                      appearance = list(default="lhs",rhs="8"))
+# Borrar reglas redundantes
+ocho.subset.rules <- which(colSums(is.subset(ocho.association.rules, ocho.association.rules)) > 1) # get subset rules in  
+ocho.subset.association.rules. <- ocho.association.rules[-ocho.subset.rules] # remove subset rules.
+inspect(ocho.subset.association.rules.)
+
+ocho_by_count <- sort(ocho.association.rules, by = "count")
+ocho_by_conf <- sort(ocho.association.rules, by = "confidence")
+#wv_by_supp <- sort(wv.subset.association.rules., by = "support")
+inspect(ocho_by_count)
+inspect(ocho_by_conf)
+#inspect(wv_by_supp)
+```
+
+```{r}
+## GRAFICOS 
+## Dataset Entero
+library(arulesViz)
+# Filter rules with confidence greater than 0.4 or 40%
+subRules<-association.rules.clean[quality(association.rules.clean)$confidence>0.7]
+#Plot SubRules
+plot(subRules,method="two-key plot")
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(subRules, n = 25, by = "confidence")
+
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(top10subRules, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation Dataset Limpio
+# Filter top 20 rules with highest lift
+subRules2<-head(subRules, n=25, by="confidence")
+plot(subRules2, method="paracoord")
+
+```
+```{r}
+#Plot SubRules
+plot(assault.subset.association.rules.,method="two-key plot")
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(assault.subset.association.rules., n = 20, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(assault.subset.association.rules., method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation Dataset Limpio
+# Filter top 20 rules with highest lift
+subRules2<-head(assault.subset.association.rules., n=20, by="confidence")
+plot(top10subRules, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(cd.association.rules,method="two-key plot")
+
+subRules_cd<-cd.association.rules[quality(cd.association.rules)$confidence>0.2]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(cd.association.rules, n = 10, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_cd, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation Dataset Limpio
+# Filter top 20 rules with highest lift
+subRules2<-head(subRules_cd, n=25, by="confidence")
+plot(top10subRules, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(dp.association.rules,method="two-key plot")
+
+subRules_dp<-dp.association.rules[quality(dp.association.rules)$confidence>0.1]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(dp.association.rules, n = 10, by = "count")
+
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_dp, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation Dataset Limpio
+# Filter top 20 rules with highest lift
+subRules2<-head(subRules_dp, n=25, by="count")
+plot(subRules_dp, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(narcotics_clean.association.rules,method="two-key plot")
+
+subRules_narcotics<-narcotics_clean.association.rules[quality(narcotics_clean.association.rules)$confidence>0.6]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(narcotics_clean.association.rules, n = 10, by = "confidence")
+
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_narcotics, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation Dataset Limpio
+# Filter top 20 rules with highest lift
+subRules2<-head(subRules_narcotics, n=25, by="confidence")
+plot(subRules_narcotics, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(robbery.association.rules,method="two-key plot")
+
+subRules_robbery<-robbery.association.rules[quality(robbery.association.rules)$confidence>0.15]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(robbery.association.rules, n = 10, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_robbery, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation Dataset Limpio
+# Filter top 20 rules with highest lift
+subRules2<-head(subRules_robbery, n=25, by="confidence")
+plot(top10subRules, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(theft.association.rules,method="two-key plot")
+
+subRules_theft<-theft.association.rules[quality(theft.association.rules)$confidence>0.45]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(theft.association.rules, n = 10, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_theft, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation
+plot(top10subRules, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(vc.association.rules,method="two-key plot")
+
+subRules_vc<-vc.association.rules[quality(vc.association.rules)$confidence>0.15]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(vc.association.rules, n = 10, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_vc, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation
+plot(top10subRules, method="paracoord")
+```
+```{r}
+#Plot SubRules
+plot(wv.association.rules,method="two-key plot")
+
+subRules_wv<-wv.association.rules[quality(wv.association.rules)$confidence>0.1]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(wv.association.rules, n = 10, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_wv, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation
+plot(top10subRules, method="paracoord")
+```
+
+```{r}
+#Plot SubRules
+plot(ocho.association.rules,method="two-key plot")
+
+subRules_8<-ocho.association.rules[quality(ocho.association.rules)$confidence>0.01]
+
+## Seleccionamos un numero limitado de reglas en el dataset limpio
+top10subRules <- head(ocho.association.rules, n = 20, by = "confidence")
+inspect(top10subRules)
+# Now, plot an interactive graph:
+#Note: You can make all your plots interactive using engine=htmlwidget parameter in plot
+plot(subRules_8, method = "graph",  engine = "htmlwidget")
+
+## Individual Rule Representation
+plot(top10subRules, method="paracoord")
+```
+
+## Mapas de Densidad
+
+```{r}
+## INITIALIZE
+library("leaflet")
+library("data.table")
+library("sp")
+library("rgdal")
+# library("maptools")
+library("KernSmooth")
+library(viridis)
+library(RColorBrewer)
+
+assault <- na.omit(assault)
+setDT(assault)
+criminal_damage <- na.omit(criminal_damage)
+setDT(criminal_damage)
+deceptive_practice <- na.omit(deceptive_practice)
+setDT(deceptive_practice)
+narcotics <- na.omit(narcotics)
+setDT(narcotics)
+robbery <- na.omit(robbery)
+setDT(robbery)
+theft <- na.omit(theft)
+setDT(theft)
+violent_crime <- na.omit(violent_crime)
+setDT(violent_crime)
+weapons_violation <- na.omit(weapons_violation)
+setDT(weapons_violation)
+
+## MAKE CONTOUR LINES
+## Assault
+kde_assault <- bkde2D(assault[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_assault <- contourLines(kde_assault$x1 , kde_assault$x2 , kde_assault$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_assault<- as.factor(sapply(CL_assault, `[[`, "level"))
+NLEV_assault <- length(levels(LEVS_assault))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_assault <- lapply(1:length(CL_assault), function(i)
+    Polygons(list(Polygon(cbind(CL_assault[[i]]$x, CL_assault[[i]]$y))), ID=i))
+spgons_assault = SpatialPolygons(pgons_assault)
+
+## Criminal Damage
+kde_cd <- bkde2D(criminal_damage[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_cd <- contourLines(kde_cd$x1 , kde_cd$x2 , kde_cd$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_cd<- as.factor(sapply(CL_cd, `[[`, "level"))
+NLEV_cd <- length(levels(LEVS_cd))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_cd <- lapply(1:length(CL_cd), function(i)
+    Polygons(list(Polygon(cbind(CL_cd[[i]]$x, CL_cd[[i]]$y))), ID=i))
+spgons_cd = SpatialPolygons(pgons_cd)
+
+## Deceptive Practice
+kde_dp <- bkde2D(deceptive_practice[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_dp <- contourLines(kde_dp$x1 , kde_dp$x2 , kde_dp$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_dp<- as.factor(sapply(CL_dp, `[[`, "level"))
+NLEV_dp <- length(levels(LEVS_dp))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_dp <- lapply(1:length(CL_dp), function(i)
+    Polygons(list(Polygon(cbind(CL_dp[[i]]$x, CL_dp[[i]]$y))), ID=i))
+spgons_dp = SpatialPolygons(pgons_dp)
+
+## Narcotics
+kde_narcotics <- bkde2D(narcotics[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_narcotics <- contourLines(kde_narcotics$x1 , kde_narcotics$x2 , kde_narcotics$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_narcotics <- as.factor(sapply(CL_narcotics, `[[`, "level"))
+NLEV_narcotics <- length(levels(LEVS_narcotics))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_narcotics <- lapply(1:length(CL_narcotics), function(i)
+    Polygons(list(Polygon(cbind(CL_narcotics[[i]]$x, CL_narcotics[[i]]$y))), ID=i))
+spgons_narcotics = SpatialPolygons(pgons_narcotics)
+
+## Robbery
+kde_robbery <- bkde2D(robbery[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_robbery <- contourLines(kde_robbery$x1 , kde_robbery$x2 , kde_robbery$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_robbery <- as.factor(sapply(CL_robbery, `[[`, "level"))
+NLEV_robbery <- length(levels(LEVS_robbery))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_robbery <- lapply(1:length(CL_robbery), function(i)
+    Polygons(list(Polygon(cbind(CL_robbery[[i]]$x, CL_robbery[[i]]$y))), ID=i))
+spgons_robbery = SpatialPolygons(pgons_robbery)
+
+## Thefts
+kde_theft <- bkde2D(theft[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_theft <- contourLines(kde_theft$x1 , kde_theft$x2 , kde_theft$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_theft <- as.factor(sapply(CL_theft, `[[`, "level"))
+NLEV_theft <- length(levels(LEVS_theft))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_theft <- lapply(1:length(CL_theft), function(i)
+    Polygons(list(Polygon(cbind(CL_theft[[i]]$x, CL_theft[[i]]$y))), ID=i))
+spgons_theft = SpatialPolygons(pgons_theft)
+
+## Violent Crimws
+kde_vc <- bkde2D(violent_crime[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_vc <- contourLines(kde_vc$x1 , kde_vc$x2 , kde_vc$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_vc <- as.factor(sapply(CL_vc, `[[`, "level"))
+NLEV_vc <- length(levels(LEVS_vc))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_vc <- lapply(1:length(CL_vc), function(i)
+    Polygons(list(Polygon(cbind(CL_vc[[i]]$x, CL_vc[[i]]$y))), ID=i))
+spgons_vc = SpatialPolygons(pgons_vc)
+
+## Weapons Violation
+kde_wv <- bkde2D(weapons_violation[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_wv <- contourLines(kde_wv$x1 , kde_wv$x2 , kde_wv$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_wv <- as.factor(sapply(CL_wv, `[[`, "level"))
+NLEV_wv <- length(levels(LEVS_wv))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_wv <- lapply(1:length(CL_wv), function(i)
+    Polygons(list(Polygon(cbind(CL_wv[[i]]$x, CL_wv[[i]]$y))), ID=i))
+spgons_wv = SpatialPolygons(pgons_wv)
+
+leaflet() %>% addTiles() %>%
+    addPolygons(data = spgons_narcotics, color = brewer.pal(NLEV_narcotics, name = "YlOrRd")[LEVS_narcotics], group = "Narcotics") %>%
+    addPolygons(data = spgons_assault, color = brewer.pal(NLEV_assault, name = "Reds")[LEVS_assault], group = "Assault") %>%
+    addPolygons(data = spgons_cd, color = brewer.pal(NLEV_cd, name="YlGnBu")[LEVS_cd], group = "Criminal Damage") %>%
+    addPolygons(data = spgons_dp, color = brewer.pal(NLEV_dp, name = "YlGn")[LEVS_dp], group = "Deceptive Practice") %>%
+    addPolygons(data = spgons_robbery, color = brewer.pal(NLEV_robbery, name = "Purples")[LEVS_robbery], group = "Robbery") %>%
+    addPolygons(data = spgons_theft, color = brewer.pal(NLEV_theft, name = "Oranges")[LEVS_theft], group = "Thefts") %>%
+    addPolygons(data = spgons_vc, color = brewer.pal(NLEV_vc, name = "Greys")[LEVS_vc], group = "Violent Crimes") %>%
+    addPolygons(data = spgons_wv, color = brewer.pal(NLEV_wv, name = "Blues")[LEVS_wv], group = "Weapons Violation") %>%
+    addLabelOnlyMarkers(districts$longitude, districts$latitude, label =  districts$district, 
+                      labelOptions = labelOptions(noHide = T, direction = 'top', textOnly = T), group = "Districts") %>%
+    addLayersControl(overlayGroups = c("Assault", "Criminal Damage","Deceptive Practice", "Narcotics","Robbery","Thefts","Violent Crimes","Weapons Violation", "Districts"),options = layersControlOptions(collapsed = FALSE))
+    
+#addCircles(lng = narcotics$longitude, lat = narcotics$latitude,radius = .1, opacity = .4, col = "blue", group = "Points") %>%
+
+
+```
+```{r}
+#leaflet() %>% addTiles() %>%
+#    addCircles(lng = weapons_violation$longitude, lat = weapons_violation$latitude,radius = .05, opacity = 0.1, col = brewer.pal(10,name = "Reds"), group = "Narcotics") %>%
+#    addLabelOnlyMarkers(districts$longitude, districts$latitude, label =  districts$district, 
+#                      labelOptions = labelOptions(noHide = T, direction = 'top', textOnly = T, textsize = "15px"), group = #"Districts") %>%
+#    addLayersControl(overlayGroups = c("Assault", "Criminal Damage","Deceptive Practice", "Narcotics","Robbery","Thefts","Violent Crimes","Weapons Violation", "Districts"),options = layersControlOptions(collapsed = FALSE))
+
+```
+## Clustering 
+```{r}
+chicago_crime_clustering <- subset(chicago_crime_subset, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude))
+unique(chicago_crime_clustering$primary_type)
+
+library(data.table)
+library(mltools)
+#Crime_chicago_dummy <- one_hot(as.data.table(Crime_chicago_def_clust))
+
+types <- unique(chicago_crime_clustering$primary_type)
+chicago_crime_clustering$primary_type <- match(chicago_crime_clustering$primary_type, unique(chicago_crime_clustering$primary_type))
+chicago_crime_clustering$arrest <- match(chicago_crime_clustering$arrest, unique(chicago_crime_clustering$arrest))
+#chicago_crime_clustering$location_description <- match(chicago_crime_clustering$location_description, unique(chicago_crime_clustering$location_description))
+chicago_crime_clustering$district <- as.numeric(chicago_crime_clustering$district)
+test <- chicago_crime_clustering
+#Normalization of variables
+library(RSNNS)
+
+train_set <- subset(chicago_crime_subset_tr, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude))
+train_set$primary_type <- match(train_set$primary_type, unique(train_set$primary_type))
+train_set$arrest <- match(train_set$arrest, unique(train_set$arrest))
+#train_set$location_description <- match(train_set$location_description, unique(train_set$location_description))
+train_set$district <- as.numeric(train_set$district)
+
+#index <- sample(nrow(chicago_crime_clustering_cut), round(0.75*nrow(chicago_crime_clustering_cut)))
+#train <- Crime_chicago_def_clust_cut[index,] 
+#test <- Crime_chicago_def_clust_cut[-index,]
+train_label <- train_set[,1]
+test_label <- test[,1]
+
+#Optimum number of clusters. Elbow method
+# Alternative using fviz function for Elbow method
+library(factoextra)
+library(NbClust)
+set.seed(123)
+train_small <- train_set[1:1000,]
+test_small <- test[1:100,]
+
+## Dendograms
+library(tidyverse)      #data manipulation and visualization
+library(class)          # to call class package for kNN
+library(caret)
+library(cluster)
+# Divisive Hierarchical Clustering - diana
+# compute divisive hierarchical clustering
+div <- diana(train_small)
+plot(div, main = "Divisive")
+
+distance <- dist(train_small,method = "euclidean")
+agg <- hclust(distance, method = "complete")
+plot(agg,
+     main = "Agglomerative, complete linkages")
+
+library(fpc)
+cstats.table <- function(dist, tree, k) {
+clust.assess <- c("cluster.number","n","within.cluster.ss","average.within","average.between",
+                  "wb.ratio","dunn2","avg.silwidth")
+clust.size <- c("cluster.size")
+stats.names <- c()
+row.clust <- c()
+output.stats <- matrix(ncol = k, nrow = length(clust.assess))
+cluster.sizes <- matrix(ncol = k, nrow = k)
+for(i in c(1:k)){
+  row.clust[i] <- paste("Cluster-", i, " size")
+}
+for(i in c(2:k)){
+  stats.names[i] <- paste("Test", i-1)
+  
+  for(j in seq_along(clust.assess)){
+    output.stats[j, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.assess])[j]
+    
+  }
+  
+  for(d in 1:k) {
+    cluster.sizes[d, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.size])[d]
+    dim(cluster.sizes[d, i]) <- c(length(cluster.sizes[i]), 1)
+    cluster.sizes[d, i]
+    
+  }
+}
+output.stats.df <- data.frame(output.stats)
+cluster.sizes <- data.frame(cluster.sizes)
+cluster.sizes[is.na(cluster.sizes)] <- 0
+rows.all <- c(clust.assess, row.clust)
+# rownames(output.stats.df) <- clust.assess
+output <- rbind(output.stats.df, cluster.sizes)[ ,-1]
+colnames(output) <- stats.names[2:k]
+rownames(output) <- rows.all
+is.num <- sapply(output, is.numeric)
+output[is.num] <- lapply(output[is.num], round, 2)
+output
+}
+# I am capping the maximum amout of clusters by 7
+# I want to choose a reasonable number, based on which I will be able to see basic differences between customer groups as a result
+stats.df.divisive <- cstats.table(distance, div, 7)
+stats.df.divisive
+
+stats.df.aggl <-cstats.table(distance, agg, 7) #complete linkages looks like the most balanced approach
+stats.df.aggl
+
+#confusionMatrix(train_small, )
+```
+```{r}
+library(data.table)
+library(mltools)
+#Crime_chicago_dummy <- one_hot(as.data.table(Crime_chicago_def_clust))
+#narcotics <- subset(narcotics, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+#narcotics_tr <- subset(narcotics_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+narcotics_clustering <- subset(narcotics, select=-c(location_description))
+narcotics_clustering_tr <- subset(narcotics_tr, select=-c(location_description))
+
+types <- unique(chicago_crime_clustering$primary_type)
+narcotics_clustering$primary_type <- match(chicago_crime_clustering$primary_type, unique(chicago_crime_clustering$primary_type))
+narcotics_clustering$arrest <- match(chicago_crime_clustering$arrest, unique(chicago_crime_clustering$arrest))
+#narcotics_clustering$location_description <- match(chicago_crime_clustering$location_description, unique(narcotics_clustering$location_description))
+narcotics_clustering$district <- as.numeric(narcotics_clustering$district)
+test <- narcotics_clustering
+#Normalization of variables
+library(RSNNS)
+
+train_set <- narcotics_clustering_tr
+train_set$primary_type <- match(train_set$primary_type, unique(train_set$primary_type))
+train_set$arrest <- match(train_set$arrest, unique(train_set$arrest))
+#train_set$location_description <- match(train_set$location_description, unique(train_set$location_description))
+train_set$district <- as.numeric(train_set$district)
+
+#index <- sample(nrow(chicago_crime_clustering_cut), round(0.75*nrow(chicago_crime_clustering_cut)))
+#train <- Crime_chicago_def_clust_cut[index,] 
+#test <- Crime_chicago_def_clust_cut[-index,]
+train_label <- train_set[,1]
+test_label <- test[,1]
+
+#Optimum number of clusters. Elbow method
+# Alternative using fviz function for Elbow method
+library(factoextra)
+library(NbClust)
+set.seed(123)
+train_small <- train_set[1:1000,]
+test_small <- test[1:100,]
+
+## Dendograms
+library(tidyverse)      #data manipulation and visualization
+library(class)          # to call class package for kNN
+library(caret)
+library(cluster)
+# Divisive Hierarchical Clustering - diana
+# compute divisive hierarchical clustering
+div <- diana(train_small)
+plot(div, main = "Divisive")
+
+distance <- dist(train_small,method = "euclidean")
+agg <- hclust(distance, method = "complete")
+plot(agg,
+     main = "Agglomerative, complete linkages")
+
+library(fpc)
+cstats.table <- function(dist, tree, k) {
+clust.assess <- c("cluster.number","n","within.cluster.ss","average.within","average.between",
+                  "wb.ratio","dunn2","avg.silwidth")
+clust.size <- c("cluster.size")
+stats.names <- c()
+row.clust <- c()
+output.stats <- matrix(ncol = k, nrow = length(clust.assess))
+cluster.sizes <- matrix(ncol = k, nrow = k)
+for(i in c(1:k)){
+  row.clust[i] <- paste("Cluster-", i, " size")
+}
+for(i in c(2:k)){
+  stats.names[i] <- paste("Test", i-1)
+  
+  for(j in seq_along(clust.assess)){
+    output.stats[j, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.assess])[j]
+    
+  }
+  
+  for(d in 1:k) {
+    cluster.sizes[d, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.size])[d]
+    dim(cluster.sizes[d, i]) <- c(length(cluster.sizes[i]), 1)
+    cluster.sizes[d, i]
+    
+  }
+}
+output.stats.df <- data.frame(output.stats)
+cluster.sizes <- data.frame(cluster.sizes)
+cluster.sizes[is.na(cluster.sizes)] <- 0
+rows.all <- c(clust.assess, row.clust)
+# rownames(output.stats.df) <- clust.assess
+output <- rbind(output.stats.df, cluster.sizes)[ ,-1]
+colnames(output) <- stats.names[2:k]
+rownames(output) <- rows.all
+is.num <- sapply(output, is.numeric)
+output[is.num] <- lapply(output[is.num], round, 2)
+output
+}
+# I am capping the maximum amout of clusters by 7
+# I want to choose a reasonable number, based on which I will be able to see basic differences between customer groups as a result
+stats.df.divisive <- cstats.table(distance, div, 7)
+stats.df.divisive
+
+stats.df.aggl <-cstats.table(distance, agg, 7) #complete linkages looks like the most balanced approach
+stats.df.aggl
+
+#confusionMatrix(train_small, )
+```
+
+```{r}
+library("ggplot2")
+library("reshape2")
+library("purrr")
+library("dplyr")
+# let's start with a dendrogram
+library("dendextend")
+dendro <- as.dendrogram(agg)
+dendro.col <- dendro %>%
+  set("branches_k_color", k = 8, value =   c("darkslategray", "darkslategray4", "darkslategray3", "gold3", "darkcyan", "cyan3", "gold3")) %>%
+  set("branches_lwd", 0.6) %>%
+  set("labels_colors", 
+      value = c("darkslategray")) %>% 
+  set("labels_cex", 0.5)
+ggd1 <- as.ggdend(dendro.col)
+ggplot(ggd1, theme = theme_minimal()) +
+  labs(x = "Num. observations", y = "Height", title = "Dendrogram, k = 8")
+
+
+
+```
+## Arboles de Decision
+```{r}
+## c50
+
+library(dplyr)
+library(MASS)        # for obtaining data
+library(tidyverse)  # for data processing
+library(rpart)      # for CART decision tree
+library(rpart.plot) # for plotting CART
+library(caret)      # for confusion matrix and more
+library(rsample)    # for data splitting
+library(data.table)
+library(C50)
+
+
+#levels(chicago_crime$location_description)[1] = "None"
+## Creating a training and test datasets
+set.seed(1234)
+
+chicago_crime_trees <- subset(chicago_crime_subset, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude))
+chicago_crime_trees_tr <- subset(chicago_crime_subset_tr, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude))
+
+library(dplyr)
+chicago_crime_trees %>% mutate_if(is.factor, as.character) -> chicago_crime_trees
+chicago_crime_trees_tr %>% mutate_if(is.factor, as.character) -> chicago_crime_trees_tr
+
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "ROBBERY"] <- "ROB"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "NARCOTICS"] <- "NAR"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "ASSAULT"] <- "ASS"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "WEAPONS VIOLATION"] <- "WV"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "CRIMINAL DAMAGE"] <- "CD"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "VIOLENT CRIME"] <- "VC"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "DECEPTIVE PRACTICE"] <- "DP"
+chicago_crime_trees$primary_type[chicago_crime_trees$primary_type == "THEFT"] <- "TH"
+
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "ROBBERY"] <- "ROB"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "NARCOTICS"] <- "NAR"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "ASSAULT"] <- "ASS"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "WEAPONS VIOLATION"] <- "WV"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "CRIMINAL DAMAGE"] <- "CD"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "VIOLENT CRIME"] <- "VC"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "DECEPTIVE PRACTICE"] <- "DP"
+chicago_crime_trees_tr$primary_type[chicago_crime_trees_tr$primary_type == "THEFT"] <- "TH"
+
+#train_c50<- chicago_crime_trees_tr
+#test_c50<- chicago_crime_trees
+
+crime_split_c50<- initial_split(subset(chicago_crime_subset_tr, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+train_c50<- training(crime_split_c50)
+test_c50<- testing(crime_split_c50)
+
+#train_c50$location_description <- as.factor(train_c50$location_description)
+#test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+#train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+#test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+train_c50$arrest <- as.factor(train_c50$arrest)
+test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$primary_type <- as.factor(train_c50$primary_type)
+test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(primary_type  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.2))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$primary_type)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$primary_type),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$primary_type)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$primary_type),
+      "correct classified cases from", length(pred_train))
+
+
+```
+```{r}
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.1))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,faclen=10, clip.facs=TRUE,subtree=NULL, tweak=1, digits=2)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(arrest  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.9))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,faclen=10, clip.facs=TRUE,subtree=NULL, tweak=1, digits=2)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$arrest)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$arrest),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$arrest)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$arrest),
+      "correct classified cases from", length(pred_train))
+```
+
+
+```{r}
+#levels(chicago_crime$location_description)[1] = "None"
+## Creating a training and test datasets
+set.seed(1234)
+#assault <- subset(assault, select=-c(location_description))
+#assault_tr <- subset(assault_tr, select=-c(location_description))
+
+assault_tr <- subset(assault_tr, district=="3" | district == "4" | district == "5" | district=="6" | district == "7" | district=="8" | district == "1" | district == "18" | district == "9" | district=="10" | district == "22" | district == "15" )
+assault <- subset(assault, district=="3" | district == "4" | district == "5" | district=="6" | district == "7" | district=="8" | district == "1" | district == "18" | district == "9" | district=="10" | district == "22" | district == "15" )
+
+#train_c50<- subset(assault_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+#test_c50<- subset(assault, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+crime_split_c50<- initial_split(subset(assault_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+train_c50<- training(crime_split_c50)
+test_c50<- testing(crime_split_c50)
+
+train_c50$location_description <- as.factor(train_c50$location_description)
+test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+train_c50$arrest <- as.factor(train_c50$arrest)
+test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.0001))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+#levels(chicago_crime$location_description)[1] = "None"
+## Creating a training and test datasets
+set.seed(1234)
+#criminal_damage <- subset(criminal_damage, select=-c(location_description))
+#criminal_damage_tr <- subset( criminal_damage_tr, select=-c(location_description))
+criminal_damage_tr <- subset(criminal_damage_tr, district=="3" | district == "4" | district == "5" | district=="6" | district == "7" | district=="8" | district == "1" | district == "18"  | district == "9" | district=="20" | district == "25" | district == "11")
+criminal_damage <- subset(criminal_damage, district=="3" | district == "4" | district == "5" | district=="6" | district == "7" | district=="8" | district == "1" | district == "18"  | district == "9" | district=="20" | district == "25" | district == "11")
+
+train_c50<- subset(criminal_damage_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+test_c50<- subset(criminal_damage, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+#crime_split_c50<- initial_split(subset(chicago_crime_subset_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+#train_c50<- training(crime_split_c50)
+#test_c50<- testing(crime_split_c50)
+
+train_c50$location_description <- as.factor(train_c50$location_description)
+test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+#train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+#test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+train_c50$arrest <- as.factor(train_c50$arrest)
+test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.001))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+#levels(chicago_crime$location_description)[1] = "None"
+## Creating a training and test datasets
+set.seed(1234)
+#deceptive_practice <- subset(deceptive_practice, select=-c(location_description))
+#deceptive_practice_tr <- subset(deceptive_practice_tr, select=-c(location_description))
+
+deceptive_practice_tr <- subset(deceptive_practice_tr, district=="19" | district == "4" | district == "25" | district=="2" | district == "24" |district == "1" | district == "18"| district == "20"  | district == "9" | district=="21" | district == "25" | district == "11" )
+
+deceptive_practice <- subset(deceptive_practice, district=="19" | district == "4" | district == "25" | district=="2" | district == "24" |district == "1" | district == "18"| district == "20"  | district == "9" | district=="21" | district == "25" | district == "11" )
+
+#train_c50<- subset(deceptive_practice_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+#test_c50<- subset(deceptive_practice, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+crime_split_c50<- initial_split(subset(deceptive_practice_tr, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+train_c50<- training(crime_split_c50)
+test_c50<- testing(crime_split_c50)
+
+#train_c50$location_description <- as.factor(train_c50$location_description)
+#test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+#train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+#test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+train_c50$arrest <- as.factor(train_c50$arrest)
+test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.5))  #Higher CF less prunning
+#summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+#levels(chicago_crime$location_description)[1] = "None"
+## Creating a training and test datasets
+set.seed(1234)
+#narcotics <- subset(narcotics, select=-c(location_description))
+#narcotics_tr <- subset(narcotics_tr, select=-c(location_description))
+narcotics_tr <- subset(narcotics_tr, district=="10" | district == "11" | district == "15" | district=="8" | district == "1" | district=="18")
+narcotics <- subset(narcotics, district=="10" | district == "11" | district == "15" | district=="8" | district == "1" | district=="18")
+
+#train_c50<- subset(narcotics_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+#test_c50<- subset(narcotics, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+crime_split_c50<- initial_split(subset(narcotics_tr, select=-c(location_description,case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+train_c50<- training(crime_split_c50)
+test_c50<- testing(crime_split_c50)
+
+#train_c50$location_description <- as.factor(train_c50$location_description)
+#test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+#train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+#test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+#train_c50$arrest <- as.factor(train_c50$arrest)
+#test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.01))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+## Creating a training and test datasets
+set.seed(1234)
+#robbery <- subset(robbery, select=-c(location_description))
+#robbery_tr <- subset(robbery_tr, select=-c(location_description))
+robbery_tr <- subset(robbery_tr, district=="6" | district == "11" | district == "15" | district=="8" | district == "1" | district=="18"| district=="9" | district == "5" | district=="4")
+robbery <- subset(robbery, district=="6" | district == "11" | district == "15" | district=="8" | district == "1" | district=="18"| district=="9" | district == "5" | district=="4")
+
+#robbery$location_description <- gsub("PARKING LOT","PARKING",robbery$location_description)
+#robbery_tr$location_description <- gsub("PARKING LOT","PARKING",robbery_tr$location_description)
+#robbery$location_description <- gsub("PARKINGGARAGE(NON.RESID.)","PARKING",robbery$location_description)
+#robbery_tr$location_description <- gsub("PARKINGGARAGE(NON.RESID.)","PARKING",robbery_tr$location_description)
+
+train_c50<- subset(robbery_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+test_c50<- subset(robbery, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+#crime_split_c50<- initial_split(subset(chicago_crime_subset_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+#train_c50<- training(crime_split_c50)
+#test_c50<- testing(crime_split_c50)
+
+train_c50$location_description <- as.factor(train_c50$location_description)
+test_c50$location_description <- as.factor(test_c50$location_description)
+train_c50$location_description <- factor(train_c50$location_description)
+test_c50$location_description <- factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+train_c50$arrest <- as.factor(train_c50$arrest)
+test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~., data=train_c50, control = C5.0Control(noGlobalPruning = TRUE, CF= 0.000001))  #Higher CF less prunning
+summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+## Creating a training and test datasets
+set.seed(1234)
+theft <- subset(theft, select=-c(location_description))
+theft_tr <- subset(theft_tr, select=-c(location_description))
+theft_tr <- subset(theft_tr, district=="19" | district == "1" | district=="18"| district=="24" | district == "5" | district=="4")
+theft <- subset(theft, district=="19" | district == "1" | district=="18"| district=="24" | district == "5" | district=="4")
+
+train_c50<- subset(theft_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+test_c50<- subset(theft, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+#crime_split_c50<- initial_split(subset(chicago_crime_subset_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+#train_c50<- training(crime_split_c50)
+#test_c50<- testing(crime_split_c50)
+
+train_c50$location_description <- as.factor(train_c50$location_description)
+test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+#train_c50$arrest <- as.factor(train_c50$arrest)
+#test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.01))  #Higher CF less prunning
+#summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+set.seed(1234)
+#violent_crime <- subset(violent_crime, select=-c(location_description))
+#violent_tr_crime <- subset(violent_tr_crime, select=-c(location_description))
+violent_tr_crime <- subset(violent_tr_crime, district=="6" | district == "11" | district == "15" | district=="8" | district == "1" | district=="18"| district=="9" | district == "5" | district=="4" | district == "19"| district == "20"  | district == "10" | district=="21" | district == "25" | district == "2")
+violent_crime <- subset(violent_crime, district=="6" | district == "11" | district == "15" | district=="8" | district == "1" | district=="18"| district=="9" | district == "5" | district=="4" | district == "19"| district == "20"  | district == "10" | district=="21" | district == "25" | district == "2")
+
+train_c50<- subset(violent_tr_crime, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+test_c50<- subset(violent_crime, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+#crime_split_c50<- initial_split(subset(chicago_crime_subset_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+#train_c50<- training(crime_split_c50)
+#test_c50<- testing(crime_split_c50)
+
+train_c50$location_description <- as.factor(train_c50$location_description)
+test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+#train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+#test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+train_c50$arrest <- as.factor(train_c50$arrest)
+test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, trials = 10,control = C5.0Control(noGlobalPruning = FALSE, CF= 0.000001))  #Higher CF less prunning
+#summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL,trial=9)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+
+```{r}
+set.seed(1234)
+#weapons_violation <- subset(weapons_violation, select=-c(location_description))
+#weapons_violation_tr <- subset(weapons_violation_tr, select=-c(location_description))
+weapons_violation_tr <- subset(weapons_violation_tr, district=="6" | district == "11" | district == "7" | district=="8" | district == "1" | district=="18" | district == "5" | district=="4")
+weapons_violation <- subset(weapons_violation, district=="6" | district == "11" | district == "7" | district=="8" | district == "1" | district=="18" | district == "5" | district=="4")
+
+train_c50<- subset(weapons_violation_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+test_c50<- subset(weapons_violation, select=-c(case_number,block,ward,description,day,month,latitude,longitude))
+
+#crime_split_c50<- initial_split(subset(chicago_crime_subset_tr, select=-c(case_number,block,ward,description,day,month,latitude,longitude)), prop=0.8)
+#train_c50<- training(crime_split_c50)
+#test_c50<- testing(crime_split_c50)
+
+train_c50$location_description <- as.factor(train_c50$location_description)
+test_c50$location_description <- as.factor(test_c50$location_description)
+#train_c50$arrest <- as.numeric(train_c50$arrest, unique(train_c50$arrest))
+#test_c50$arrest <- as.numeric(test_c50$arrest, unique(test_c50$arrest))
+#train_c50$primary_type <- as.numeric(train_c50$primary_type, unique(train_c50$primary_type))
+#test_c50$primary_type <- as.numeric(test_c50$primary_type, unique(test_c50$primary_type))
+train_c50$location_description <- as.numeric(train_c50$location_description, unique(train_c50$location_description))
+test_c50$location_description <- as.numeric(test_c50$location_description, unique(test_c50$location_description))
+#train_c50$district <- as.numeric(train_c50$district, unique(train_c50$district))
+#test_c50$district <- as.numeric(test_c50$district, unique(test_c50$district))
+#train_c50$arrest <- as.factor(train_c50$arrest)
+#test_c50$arrest <- as.factor(test_c50$arrest)
+train_c50$district <- as.factor(train_c50$district)
+test_c50$district <- as.factor(test_c50$district)
+train_c50$district <- factor(train_c50$district)
+test_c50$district <- factor(test_c50$district)
+#train_c50$primary_type <- as.factor(train_c50$primary_type)
+#test_c50$primary_type <- as.factor(test_c50$primary_type)
+
+
+#Creating the decision tree algorithm C4.5 
+tree_result <- C5.0(district  ~ ., data=train_c50, control = C5.0Control(noGlobalPruning = FALSE, CF= 0.01))  #Higher CF less prunning
+#summary(tree_result)
+#Plotting the tree
+plot(tree_result,subtree=NULL)
+
+## PREDICTION
+#Prediction of new cases from the test dataset
+predictions <- predict(tree_result, newdata = test_c50, type ="class")
+
+#table(prediction=predictions, real= crime_test_c50$primary_type)
+#crime_test_c50$primary_type <- factor(crime_test_c50$primary_type)
+error_classification <- mean(predictions != test_c50$district)
+
+paste("The classification error in test set is:", 100*error_classification, "%",
+      sum(predictions==test_c50$district),
+      "correct classified cases from", length(predictions))
+
+pred_train <- predict(tree_result, newdata = train_c50)
+#confusionMatrix(pred_train, crime_train$district)
+#pred_train<-round(pred_train)
+#table(prediction=pred_train, real= crime_train_c50$arrest)
+
+error_classification <- mean(pred_train != train_c50$district)
+
+paste("The classification error in train set is:", 100*error_classification, "%",
+      sum(pred_train==train_c50$district),
+      "correct classified cases from", length(pred_train))
+```
+```{r}
+library(MASS)       # for obtaining data
+library(tidyverse)  # for data processing
+library(rpart)      # for CART decision tree
+library(rpart.plot) # for plotting CART
+library(caret)      # for confusion matrix and more
+library(rsample)    # for data splitting
+library(randomForest)  # For bagging and randomforest
+library(ggpubr)
+
+## Solo se pueden tener 53 valores categoricos unicos diferentes. Por esta razon hay que hacer regresion con solo estas variables.
+chicago_crime_ensemble <- subset(chicago_crime_subset, select=-c(case_number,block,description,location_description,ward,latitude,longitude))
+chicago_crime_ensemble_tr <- subset(chicago_crime_subset_tr, select=-c(case_number,location_description,description,block,ward,latitude,longitude))
+
+chicago_crime_ensemble$primary_type <- as.numeric(chicago_crime_ensemble$primary_type)
+chicago_crime_ensemble$arrest <- as.factor(chicago_crime_ensemble$arrest)
+chicago_crime_ensemble$arrest <- as.numeric(chicago_crime_ensemble$arrest)
+#chicago_crime_ensemble$primary_type <- as.factor(chicago_crime_ensemble$primary_type)
+#chicago_crime_ensemble$description <- as.factor(chicago_crime_ensemble$description)
+#chicago_crime_ensemble$description <- factor(chicago_crime_ensemble$description)
+#chicago_crime_ensemble$primary_type <- factor(chicago_crime_ensemble$primary_type)
+
+chicago_crime_ensemble_tr$primary_type <- as.numeric(chicago_crime_ensemble_tr$primary_type)
+chicago_crime_ensemble_tr$arrest <- as.factor(chicago_crime_ensemble_tr$arrest)
+chicago_crime_ensemble_tr$arrest <- as.numeric(chicago_crime_ensemble_tr$arrest)
+#chicago_crime_ensemble_tr$primary_type <- as.factor(chicago_crime_ensemble_tr$primary_type)
+#chicago_crime_ensemble_tr$description <- as.factor(chicago_crime_ensemble_tr$description)
+#chicago_crime_ensemble_tr$description <- factor(chicago_crime_ensemble_tr$description)
+#chicago_crime_ensemble_tr$primary_type <- factor(chicago_crime_ensemble_tr$primary_type)
+
+chicago_crime_ensemble_tr <- na.omit(chicago_crime_ensemble_tr)
+chicago_crime_ensemble <- na.omit(chicago_crime_ensemble)
+
+#RF_split<- initial_split(chicago_crime, prop=0.8)
+RF_train<- chicago_crime_ensemble_tr[1:10000,]
+RF_test<- chicago_crime_ensemble[1:1000,]
+
+bagging_model<- randomForest(formula=primary_type  ~ ., data=RF_train,mtry=4)  #4 from 13 predictors will be selected
+
+#Result of random forest model
+print(bagging_model)
+
+```
+## REDES NEURONALES
+```{r}
+## REDES
+chicago_crime_nn <- subset(chicago_crime_subset, select=-c(case_number,block,ward,day,latitude,longitude))
+chicago_crime_nn_tr <- subset(chicago_crime_subset_tr, select=-c(case_number,block,ward,day,latitude,longitude))
+
+library(kohonen) # for building the SOM map
+library(caret)     #for confusion matrix
+
+#Extracting target variable
+target_train <- chicago_crime_nn_tr$primary_type
+chicago_crime_nn_tr <- subset(chicago_crime_nn_tr, select=-c(primary_type))
+
+chicago_crime_nn_tr$arrest <- as.factor(chicago_crime_nn_tr$arrest)
+chicago_crime_nn_tr$arrest <- as.numeric(chicago_crime_nn_tr$arrest)
+#chicago_crime$primary_type <- as.numeric(chicago_crime$primary_type)
+chicago_crime_nn_tr$district <- as.numeric(chicago_crime_nn_tr$district)
+#chicago_crime_nn_tr$district <- as.factor(chicago_crime_nn_tr$district)
+chicago_crime_nn_tr$description <- as.factor(chicago_crime_nn_tr$description)
+chicago_crime_nn_tr$description <- as.numeric(chicago_crime_nn_tr$description)
+chicago_crime_nn_tr$location_description <- as.factor(chicago_crime_nn_tr$location_description)
+chicago_crime_nn_tr$location_description <- as.numeric(chicago_crime_nn_tr$location_description)
+chicago_crime_nn_tr$month <- as.numeric(chicago_crime_nn_tr$month)
+#chicago_crime_nn_tr$month <- as.factor(chicago_crime_nn_tr$month)
+
+#Scaling original data
+set.seed(7)
+
+
+# creation of training and test datasets
+index <- sample(nrow(chicago_crime_nn_tr), round(0.75*nrow(chicago_crime_nn_tr)))
+train <- chicago_crime_nn_tr[index,]
+test <- chicago_crime_nn_tr[-index,]
+
+train <- as.matrix(train)
+test <- as.matrix(test)
+
+train_label<-target_train[index]
+test_label<-target_train[-index]
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=8, ydim=8, topo="hexagonal")
+
+#training the map
+crime.som <- som(train[1:100000,], grid=som_grid, 
+               rlen=100, alpha=c(0.05, 0.01), 
+               radius= 2, keep.data=T)
+
+# Names of the variables used
+colnames(train)
+
+# main characteristics of the map
+summary(crime.som)
+
+#Showing the training process
+plot(crime.som, type="changes")
+
+#node counts
+plot(crime.som, type="counts", main="Examples per Neuron")
+
+#Codes/Weight vectors
+plot(crime.som, type="codes", main="Patterns Discovered")
+
+coolBlueHOtRed<-function(n, alpha=1){rainbow(n,end=4/6, 
+                                             alpha=alpha)[n:1]}
+par(mfrow=c(2,3))
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,1],
+     main=colnames(getCodes(crime.som, 1))[1],
+     palette.name=coolBlueHOtRed)
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,2],
+     main=colnames(getCodes(crime.som, 1))[2],
+     palette.name=coolBlueHOtRed)
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,3],
+     main=colnames(getCodes(crime.som, 1))[3],
+     palette.name=coolBlueHOtRed)
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,4],
+     main=colnames(getCodes(crime.som, 1))[4],
+     palette.name=coolBlueHOtRed)
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,5],
+     main=colnames(getCodes(crime.som, 1))[5],
+     palette.name=coolBlueHOtRed)
+#plot(crime.som, type="property", property=getCodes(crime.som, 1)[,6],
+#     main=colnames(getCodes(crime.som, 1))[6],
+#     palette.name=coolBlueHOtRed)
+
+# Alternative easier
+coolBlueHotRed<-function(n, alpha=1){rainbow(n,end=4/6, 
+                                             alpha=alpha)[n:1]}
+
+par(mfrow=c(5,3))
+for (j in 1:ncol(train)) {
+plot(crime.som, type="property", property=crime.som$codes[[1]][,j],
+     palette.name=coolBlueHotRed,
+     main=colnames(train)[j], cex=0.5)
+}
+
+#som.prediction <- predict(crime.som, test)
+```
+```{r}
+#Clustering patterns in the map
+groups<-8
+#Applying hierarchical clustering for grouping patterns
+crime.hc=cutree(hclust(dist(crime.som$codes[[1]])), groups)
+plot(crime.som, type="codes", bgcol = rainbow(groups)[crime.hc],
+     main="clustering the patterns discovered")
+add.cluster.boundaries(crime.som,crime.hc)
+```
+```{r}
+
+#Scaling original data
+set.seed(7)
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=8, ydim=8, topo="hexagonal")
+set.seed(7)
+kohmap <- xyf(train[1:100000,], train_label[1:100000],
+              grid=som_grid, 
+              rlen=100, alpha=c(0.05, 0.01), 
+              radius= 2, keep.data=T)
+
+#Showing the training process
+plot(kohmap, type="changes")
+
+#Showing distribution of wine labels in neurons
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c("Crime"))
+
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c(" patterns"))
+
+# Plotting classes in neurons
+plot(kohmap, type="mapping", labels=as.numeric(train_label)+3,
+     col=as.numeric(train_label)+3, pch=4, main="Map of classes", palette.name = terrain.colors)
+
+#Prediction using the training data
+print("TRAINING PREDICTION")
+kohmap.predict_tr<- predict(kohmap, newdata=train, whatmap = 1)
+prediction_table_tr<-table(train_label,kohmap.predict_tr$predictions[[2]])
+confusionMatrix(prediction_table_tr)
+
+#Prediction using the test data
+print("TEST PREDICTION")
+kohmap.predict<- predict(kohmap, newdata=test, whatmap = 1)
+prediction_table<-table(test_label,kohmap.predict$predictions[[2]])
+confusionMatrix(prediction_table)
+```
+```{r}
+## REDES
+chicago_crime_nn2 <- subset(chicago_crime_subset, select=-c(description,case_number,block,day,latitude,longitude))
+chicago_crime_nn_tr2 <- subset(chicago_crime_subset_tr, select=-c(description,case_number,block,day,latitude,longitude))
+
+library(kohonen) # for building the SOM map
+library(caret)     #for confusion matrix
+
+#Extracting target variable
+target_train2 <- chicago_crime_nn_tr2$primary_type
+chicago_crime_nn_tr2 <- subset(chicago_crime_nn_tr2, select=-c(primary_type))
+
+target_test2 <- chicago_crime_nn2$primary_type
+chicago_crime_nn2 <- subset(chicago_crime_nn2, select=-c(primary_type))
+
+chicago_crime_nn_tr2$arrest <- as.factor(chicago_crime_nn_tr2$arrest)
+chicago_crime_nn_tr2$arrest <- as.numeric(chicago_crime_nn_tr2$arrest)
+#chicago_crime$primary_type <- as.numeric(chicago_crime$primary_type)
+chicago_crime_nn_tr2$district <- as.numeric(chicago_crime_nn_tr2$district)
+#chicago_crime_nn_tr$district <- as.factor(chicago_crime_nn_tr$district)
+#chicago_crime_nn_tr2$description <- as.factor(chicago_crime_nn_tr2$description)
+#chicago_crime_nn_tr2$description <- as.numeric(chicago_crime_nn_tr2$description)
+chicago_crime_nn_tr2$location_description <- as.factor(chicago_crime_nn_tr2$location_description)
+chicago_crime_nn_tr2$location_description <- as.numeric(chicago_crime_nn_tr2$location_description)
+chicago_crime_nn_tr2$month <- as.numeric(chicago_crime_nn_tr2$month)
+chicago_crime_nn_tr$month <- as.factor(chicago_crime_nn_tr$month)
+
+#Scaling original data
+set.seed(7)
+
+# creation of training and test datasets
+index <- sample(nrow(chicago_crime_nn_tr2), round(0.75*nrow(chicago_crime_nn_tr2)))
+train <- chicago_crime_nn_tr2[index,]
+test <- chicago_crime_nn_tr2[-index,]
+
+train <- as.matrix(train)
+test <- as.matrix(test)
+
+train_label<-target_train2[index]
+test_label<-target_train2[-index]
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=8, ydim=8, topo="hexagonal")
+
+#training the map
+crime.som <- som(train[1:100000,], grid=som_grid, 
+               rlen=100, alpha=c(0.05, 0.01), 
+               radius= 2, keep.data=T)
+
+# Names of the variables used
+colnames(train)
+
+# main characteristics of the map
+summary(crime.som)
+
+#Showing the training process
+plot(crime.som, type="changes")
+
+#node counts
+plot(crime.som, type="counts", main="Examples per Neuron")
+
+#Codes/Weight vectors
+plot(crime.som, type="codes", main="Patterns Discovered")
+
+coolBlueHOtRed<-function(n, alpha=1){rainbow(n,end=4/6, 
+                                             alpha=alpha)[n:1]}
+par(mfrow=c(2,3))
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,1],
+     main=colnames(getCodes(crime.som, 1))[1],
+     palette.name=coolBlueHOtRed)
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,2],
+     main=colnames(getCodes(crime.som, 1))[2],
+     palette.name=coolBlueHOtRed)
+plot(crime.som, type="property", property=getCodes(crime.som, 1)[,3],
+     main=colnames(getCodes(crime.som, 1))[3],
+     palette.name=coolBlueHOtRed)
+
+
+# Alternative easier
+coolBlueHotRed<-function(n, alpha=1){rainbow(n,end=4/6, 
+                                             alpha=alpha)[n:1]}
+
+```
+```{r}
+#Clustering patterns in the map
+library(RColorBrewer)
+groups<-8
+#Applying hierarchical clustering for grouping patterns
+crime.hc=cutree(hclust(dist(crime.som$codes[[1]])), groups)
+plot(crime.som, type="codes", bgcol = brewer.pal(groups, name="YlGnBu")[crime.hc],
+     main="clustering the patterns discovered")
+add.cluster.boundaries(crime.som,crime.hc)
+```
+```{r}
+#Scaling original data
+set.seed(7)
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=8, ydim=8, topo="hexagonal")
+set.seed(7)
+kohmap <- xyf(train[1:100000,], train_label[1:100000],
+              grid=som_grid, 
+              rlen=100, alpha=c(0.05, 0.01), 
+              radius= 2, keep.data=T)
+
+#Showing the training process
+plot(kohmap, type="changes")
+
+#Showing distribution of wine labels in neurons
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c("Crime"))
+
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c(" patterns"))
+
+# Plotting classes in neurons
+#plot(kohmap, type="mapping", labels=as.numeric(train_label)+3,
+#     col=as.numeric(train_label)+3, pch=4, main="Map of classes", palette.name = terrain.colors)
+
+#Prediction using the training data
+print("TRAINING PREDICTION")
+kohmap.predict_tr<- predict(kohmap, newdata=train, whatmap = 1)
+prediction_table_tr<-table(train_label,kohmap.predict_tr$predictions[[2]])
+confusionMatrix(prediction_table_tr)
+
+#Prediction using the test data
+print("TEST PREDICTION")
+kohmap.predict<- predict(kohmap, newdata=test, whatmap = 1)
+prediction_table<-table(test_label,kohmap.predict$predictions[[2]])
+confusionMatrix(prediction_table)
+```
+```{r}
+## REDES
+narcotics_nn <- subset(narcotics_tr, select=-c(case_number,block,day,latitude,longitude))
+
+library(kohonen) # for building the SOM map
+library(caret)     #for confusion matrix
+
+#Extracting target variable
+target_train <- narcotics_nn$district
+narcotics_nn <- subset(narcotics_nn, select=-c(district))
+
+narcotics_nn$arrest <- as.factor(narcotics_nn$arrest)
+narcotics_nn$arrest <- as.numeric(narcotics_nn$arrest)
+narcotics_nn$primary_type <- as.factor(narcotics_nn$primary_type)
+narcotics_nn$primary_type <- as.numeric(narcotics_nn$primary_type)
+#narcotics_nn$district <- as.numeric(narcotics_nn$district)
+#chicago_crime_nn$district <- as.factor(chicago_crime_nn$district)
+narcotics_nn$description <- as.factor(narcotics_nn$description)
+narcotics_nn$description <- as.numeric(narcotics_nn$description)
+narcotics_nn$location_description <- as.factor(narcotics_nn$location_description)
+narcotics_nn$location_description <- as.numeric(narcotics_nn$location_description)
+narcotics_nn$month <- as.numeric(narcotics_nn$month)
+
+#Scaling original data
+set.seed(7)
+#target_train.sc<-scale(chicago_crime_nn_tr)
+#target_test.sc<-scale(chicago_crime_nn)
+
+# creation of training and test datasets
+index <- sample(nrow(narcotics_nn), round(0.75*nrow(narcotics_nn)))
+train <- narcotics_nn[index,]
+test <- narcotics_nn[-index,]
+
+#train <- chicago_crime_nn_tr
+train <- as.matrix(train)
+#test <- chicago_crime_nn
+test <- as.matrix(test)
+
+#train_label<-target_train
+#test_label<-target_test
+train_label<-target_train[index]
+test_label<-target_train[-index]
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=8, ydim=8, topo="hexagonal")
+
+#training the map
+crime.som <- som(train, grid=som_grid, 
+               rlen=100, alpha=c(0.05, 0.01), 
+               radius= 2, keep.data=T)
+
+# Names of the variables used
+colnames(train)
+
+# main characteristics of the map
+summary(crime.som)
+
+#Showing the training process
+plot(crime.som, type="changes")
+
+#node counts
+plot(crime.som, type="counts", main="Examples per Neuron")
+
+#Codes/Weight vectors
+plot(crime.som, type="codes", main="Patterns Discovered")
+
+```
+```{r}
+#Scaling original data
+set.seed(7)
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=8, ydim=8, topo="hexagonal")
+set.seed(7)
+kohmap <- xyf(train, train_label,
+              grid=som_grid, 
+              rlen=100, alpha=c(0.05, 0.01), 
+              radius= 2, keep.data=T)
+
+#Showing the training process
+plot(kohmap, type="changes")
+
+#Showing distribution of wine labels in neurons
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c("Crime"))
+
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c(" patterns"))
+
+#Prediction using the training data
+print("TRAINING PREDICTION")
+kohmap.predict_tr<- predict(kohmap, newdata=train, whatmap = 1)
+prediction_table_tr<-table(train_label,kohmap.predict_tr$predictions[[2]])
+confusionMatrix(prediction_table_tr)
+
+#Prediction using the test data
+print("TEST PREDICTION")
+kohmap.predict<- predict(kohmap, newdata=test, whatmap = 1)
+prediction_table<-table(test_label,kohmap.predict$predictions[[2]])
+confusionMatrix(prediction_table)
+```
+```{r}
+## REDES
+crimen <- subset(weapons_violation_tr, select=-c(case_number,block,day,latitude,longitude))
+
+library(kohonen) # for building the SOM map
+library(caret)     #for confusion matrix
+
+#Extracting target variable
+target_train <- crimen$district
+crimen <- subset(crimen, select=-c(district))
+
+crimen$arrest <- as.factor(crimen$arrest)
+crimen$arrest <- as.numeric(crimen$arrest)
+crimen$primary_type <- as.factor(crimen$primary_type)
+crimen$primary_type <- as.numeric(crimen$primary_type)
+#narcotics_nn$district <- as.numeric(narcotics_nn$district)
+#chicago_crime_nn$district <- as.factor(chicago_crime_nn$district)
+crimen$description <- as.factor(crimen$description)
+crimen$description <- as.numeric(crimen$description)
+crimen$location_description <- as.factor(crimen$location_description)
+crimen$location_description <- as.numeric(crimen$location_description)
+crimen$month <- as.numeric(crimen$month)
+
+#Scaling original data
+set.seed(7)
+#target_train.sc<-scale(chicago_crime_nn_tr)
+#target_test.sc<-scale(chicago_crime_nn)
+
+# creation of training and test datasets
+index <- sample(nrow(crimen), round(0.75*nrow(crimen)))
+train <- crimen[index,]
+test <- crimen[-index,]
+
+#train <- chicago_crime_nn_tr
+train <- as.matrix(train)
+#test <- chicago_crime_nn
+test <- as.matrix(test)
+
+#train_label<-target_train
+#test_label<-target_test
+train_label<-target_train[index]
+test_label<-target_train[-index]
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=12, ydim=12, topo="hexagonal")
+
+#training the map
+crime.som <- som(train, grid=som_grid, 
+               rlen=100, alpha=c(0.05, 0.01), 
+               radius= 2, keep.data=T)
+
+# Names of the variables used
+colnames(train)
+
+# main characteristics of the map
+summary(crime.som)
+
+#Showing the training process
+plot(crime.som, type="changes")
+
+#node counts
+plot(crime.som, type="counts", main="Examples per Neuron")
+
+#Codes/Weight vectors
+plot(crime.som, type="codes", main="Patterns Discovered")
+
+#Scaling original data
+set.seed(7)
+
+#main characteristics of the map
+som_grid<-somgrid(xdim=12, ydim=12, topo="hexagonal")
+set.seed(7)
+kohmap <- xyf(train, train_label,
+              grid=som_grid, 
+              rlen=100, alpha=c(0.05, 0.01), 
+              radius= 2, keep.data=T)
+
+#Showing the training process
+plot(kohmap, type="changes")
+
+#Showing distribution of wine labels in neurons
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c("Crime"))
+
+plot(kohmap, type="codes",  codeRendering = "lines", shape="straight",
+     main=c(" patterns"))
+
+# Plotting classes in neurons
+#plot(kohmap, type="mapping", labels=as.numeric(train_label)+3,
+#     col=as.numeric(train_label)+3, pch=4, main="Map of classes", palette.name = terrain.colors)
+
+#Prediction using the training data
+print("TRAINING PREDICTION")
+kohmap.predict_tr<- predict(kohmap, newdata=train, whatmap = 1)
+prediction_table_tr<-table(train_label,kohmap.predict_tr$predictions[[2]])
+confusionMatrix(prediction_table_tr)
+
+#Prediction using the test data
+print("TEST PREDICTION")
+kohmap.predict<- predict(kohmap, newdata=test, whatmap = 1)
+prediction_table<-table(test_label,kohmap.predict$predictions[[2]])
+confusionMatrix(prediction_table)
+```
+```{r}
+library(RColorBrewer)
+groups<-23
+#Applying hierarchical clustering for grouping patterns
+crime.hc=cutree(hclust(dist(crime.som$codes[[1]])), groups)
+plot(crime.som, type="codes", bgcol = heat.colors(groups)[crime.hc],
+     main="clustering the patterns discovered")
+add.cluster.boundaries(crime.som,crime.hc)
+```
+```{r}
+## INITIALIZE
+library("leaflet")
+library("data.table")
+library("sp")
+library("rgdal")
+# library("maptools")
+library("KernSmooth")
+library(viridis)
+library(RColorBrewer)
+
+assault <- na.omit(assault)
+assault <- subset(assault, district == "4" | district == "7" | district == "24" | district == "1" | district == "7")
+setDT(assault)
+criminal_damage <- na.omit(criminal_damage)
+criminal_damage <- subset(criminal_damage, district == "8" | district == "6" | district == "3" | district == "4" | district == "5" )
+setDT(criminal_damage)
+deceptive_practice <- na.omit(deceptive_practice)
+deceptive_practice <- subset(deceptive_practice, district == "18" | district == "24" | district == "8"| district == "19" | district == "1")
+setDT(deceptive_practice)
+narcotics <- na.omit(narcotics)
+narcotics <- subset(narcotics, district == "11" | district == "10")
+setDT(narcotics)
+robbery <- na.omit(robbery)
+robbery <- subset(robbery, district == "8" | district == "24" | district == "12" | district == "9"| district == "14" | district == "17")
+setDT(robbery)
+theft <- na.omit(theft)
+theft <- subset(theft, district == "1" | district == "19" | district == "24")
+setDT(theft)
+violent_crime <- na.omit(violent_crime)
+violent_crime <- subset(violent_crime, district == "18" | district == "19" | district == "1" | district == "24" | district == "2" | district == "8"| district == "3" | district == "4")
+setDT(violent_crime)
+weapons_violation <- na.omit(weapons_violation)
+weapons_violation <- subset(weapons_violation, district == "3" | district == "4" | district == "6"| district == "5" | district == "11"| district == "10" | district == "7" | district == "8")
+setDT(weapons_violation)
+
+## MAKE CONTOUR LINES
+## Assault
+kde_assault <- bkde2D(assault[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_assault <- contourLines(kde_assault$x1 , kde_assault$x2 , kde_assault$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_assault<- as.factor(sapply(CL_assault, `[[`, "level"))
+NLEV_assault <- length(levels(LEVS_assault))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_assault <- lapply(1:length(CL_assault), function(i)
+    Polygons(list(Polygon(cbind(CL_assault[[i]]$x, CL_assault[[i]]$y))), ID=i))
+spgons_assault = SpatialPolygons(pgons_assault)
+
+## Criminal Damage
+kde_cd <- bkde2D(criminal_damage[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_cd <- contourLines(kde_cd$x1 , kde_cd$x2 , kde_cd$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_cd<- as.factor(sapply(CL_cd, `[[`, "level"))
+NLEV_cd <- length(levels(LEVS_cd))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_cd <- lapply(1:length(CL_cd), function(i)
+    Polygons(list(Polygon(cbind(CL_cd[[i]]$x, CL_cd[[i]]$y))), ID=i))
+spgons_cd = SpatialPolygons(pgons_cd)
+
+## Deceptive Practice
+kde_dp <- bkde2D(deceptive_practice[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_dp <- contourLines(kde_dp$x1 , kde_dp$x2 , kde_dp$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_dp<- as.factor(sapply(CL_dp, `[[`, "level"))
+NLEV_dp <- length(levels(LEVS_dp))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_dp <- lapply(1:length(CL_dp), function(i)
+    Polygons(list(Polygon(cbind(CL_dp[[i]]$x, CL_dp[[i]]$y))), ID=i))
+spgons_dp = SpatialPolygons(pgons_dp)
+
+## Narcotics
+kde_narcotics <- bkde2D(narcotics[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_narcotics <- contourLines(kde_narcotics$x1 , kde_narcotics$x2 , kde_narcotics$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_narcotics <- as.factor(sapply(CL_narcotics, `[[`, "level"))
+NLEV_narcotics <- length(levels(LEVS_narcotics))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_narcotics <- lapply(1:length(CL_narcotics), function(i)
+    Polygons(list(Polygon(cbind(CL_narcotics[[i]]$x, CL_narcotics[[i]]$y))), ID=i))
+spgons_narcotics = SpatialPolygons(pgons_narcotics)
+
+## Robbery
+kde_robbery <- bkde2D(robbery[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_robbery <- contourLines(kde_robbery$x1 , kde_robbery$x2 , kde_robbery$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_robbery <- as.factor(sapply(CL_robbery, `[[`, "level"))
+NLEV_robbery <- length(levels(LEVS_robbery))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_robbery <- lapply(1:length(CL_robbery), function(i)
+    Polygons(list(Polygon(cbind(CL_robbery[[i]]$x, CL_robbery[[i]]$y))), ID=i))
+spgons_robbery = SpatialPolygons(pgons_robbery)
+
+## Thefts
+kde_theft <- bkde2D(theft[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_theft <- contourLines(kde_theft$x1 , kde_theft$x2 , kde_theft$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_theft <- as.factor(sapply(CL_theft, `[[`, "level"))
+NLEV_theft <- length(levels(LEVS_theft))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_theft <- lapply(1:length(CL_theft), function(i)
+    Polygons(list(Polygon(cbind(CL_theft[[i]]$x, CL_theft[[i]]$y))), ID=i))
+spgons_theft = SpatialPolygons(pgons_theft)
+
+## Violent Crimws
+kde_vc <- bkde2D(violent_crime[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_vc <- contourLines(kde_vc$x1 , kde_vc$x2 , kde_vc$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_vc <- as.factor(sapply(CL_vc, `[[`, "level"))
+NLEV_vc <- length(levels(LEVS_vc))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_vc <- lapply(1:length(CL_vc), function(i)
+    Polygons(list(Polygon(cbind(CL_vc[[i]]$x, CL_vc[[i]]$y))), ID=i))
+spgons_vc = SpatialPolygons(pgons_vc)
+
+## Weapons Violation
+kde_wv <- bkde2D(weapons_violation[ , list(longitude, latitude)],
+              bandwidth=c(.0001, .0001), gridsize = c(75,75))
+CL_wv <- contourLines(kde_wv$x1 , kde_wv$x2 , kde_wv$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS_wv <- as.factor(sapply(CL_wv, `[[`, "level"))
+NLEV_wv <- length(levels(LEVS_wv))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons_wv <- lapply(1:length(CL_wv), function(i)
+    Polygons(list(Polygon(cbind(CL_wv[[i]]$x, CL_wv[[i]]$y))), ID=i))
+spgons_wv = SpatialPolygons(pgons_wv)
+
+leaflet() %>% addTiles() %>%
+    addCircles(lng = assault$longitude, lat = assault$latitude,radius = .2, opacity = 0.25, color = brewer.pal(2, name = "Reds"), group = "Assault") %>%
+    addCircles(lng = criminal_damage$longitude, lat = criminal_damage$latitude,radius = .2, opacity = 0.25, col = brewer.pal(2, name="Greens")[LEVS_cd], group = "Criminal Damage") %>%
+    addCircles(lng = deceptive_practice$longitude, lat = deceptive_practice$latitude,radius = .2, opacity = 0.25, color = brewer.pal(2, name="Blues")[LEVS_dp], group = "Deceptive Practice") %>%
+    addCircles(lng = narcotics$longitude, lat = narcotics$latitude,radius = .2, opacity = 0.25, brewer.pal(2, name = "YlOrRd")[LEVS_narcotics], group = "Narcotics") %>%
+    addCircles(lng = robbery$longitude, lat = robbery$latitude,radius = .2, opacity = 0.25, color = brewer.pal(2, name = "Purples")[LEVS_robbery], group = "Robbery") %>%
+    addCircles(lng = theft$longitude, lat = theft$latitude,radius = .2, opacity = 0.25, color = brewer.pal(2, name = "Oranges")[LEVS_theft], group = "Theft") %>%
+    addCircles(lng = violent_crime$longitude, lat = violent_crime$latitude,radius = .2, opacity = 0.25, color = brewer.pal(2, name = "Greys")[LEVS_vc], group = "Violent Crimes") %>%
+    addCircles(lng = weapons_violation$longitude, lat = weapons_violation$latitude,radius = .2, opacity = 0.25, col = brewer.pal(2,name = "Purples"), group = "Weapons Violation") %>%
+    addLabelOnlyMarkers(districts$longitude, districts$latitude, label =  districts$district, 
+                      labelOptions = labelOptions(noHide = T, direction = 'top', textOnly = T), group = "Districts") %>%
+    addLayersControl(overlayGroups = c("Assault", "Criminal Damage","Deceptive Practice", "Narcotics","Robbery","Theft","Violent Crimes","Weapons Violation", "Districts"),options = layersControlOptions(collapsed = FALSE))
+    
+```
+
+
+
